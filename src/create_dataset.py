@@ -3,6 +3,9 @@ from pathlib import Path
 import pandas as pd
 from typing import Any
 
+DATA_PATH = Path("../data")
+DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
+
 
 def read_data():
     data_path = Path("../data")
@@ -92,11 +95,6 @@ def aggregate_df_data(files: list[str]) -> pd.DataFrame:
         epoch_key = "epoch (ms)"
         agg_df.index = pd.to_datetime(agg_df[epoch_key], unit="ms")
 
-        # del columns that we don't care about
-        to_del = ["epoch (ms)", "time (01:00)", "elapsed (s)"]
-        for x in to_del:
-            del agg_df[x]
-
     return agg_df
 
 
@@ -112,17 +110,23 @@ def main() -> None:
     gyro_files = [f for f in files if "_Gyroscope_" in f]
     assert len(accel_files) > 0 and len(gyro_files) > 0
 
+    accel_df = aggregate_df_data(accel_files)
+    gyro_files = aggregate_df_data(gyro_files)
+
     # concat both dfs column-wise (axis=1)
     # we need to create a selection of the first df
     # -> use iloc[:,:3] (select first 3 columns) i.e the unique columns from accel files
     # the x/y/z acceleration
     accel_and_gyro_df = pd.concat(
         [
-            aggregate_df_data(accel_files).iloc[:, :3],
-            aggregate_df_data(gyro_files),
+            # select cols 3-10 (inclusive)
+            accel_df.iloc[:, 3:10],
+            gyro_files.iloc[:, 3:6],
         ],
         axis=1,
     )
+
+    accel_and_gyro_df = accel_and_gyro_df.sort_values(by="epoch (ms)")
 
     # will result in a lot of NaN values because the accel & the gyro are
     # measuring at different frequencies in this dataset (todo: in the future
@@ -130,6 +134,67 @@ def main() -> None:
     #
     # as of now there will only be ~15% of rows that have full data because of random
     # time intervals where measurements happened at the same time between both sensors
+    # can visualize this with df.head(50)
+
+    updated_col_names = [
+        "accel_x",
+        "accel_y",
+        "accel_z",
+        "set",
+        "participant",
+        "ex",
+        "effort",
+        "gyro_x",
+        "gyro_y",
+        "gyro_z",
+    ]
+
+    # rename cols
+    accel_and_gyro_df.columns = updated_col_names
+
+    # need to reduce frequency between each measurement (so we have data for
+    # each row)
+    # sampling:
+    # using s = 1/T where T is the period
+    # Accelerometer:    12.500HZ -> measure every 1/25      -> 0.04s
+    # Gyroscope:        25.000HZ -> measure every 1/12.5    -> 0.08s
+
+    # resampling the time-series data according to the frequency difference:
+    # (sync up frequency between both sensors)
+    # see: https://pandas.pydata.org/docs/user_guide/timeseries.html#sparse-resampling
+
+    # need to apply aggregation rules to preserve categorical columns first
+    sampling_rules_for_cols = [
+        "mean",
+        "mean",
+        "mean",
+        "last",  # categorical
+        "last",  # categorical
+        "last",  # categorical
+        "last",  # categorical
+        "mean",
+        "mean",
+        "mean",
+    ]
+
+    rules = dict([*zip(updated_col_names, sampling_rules_for_cols)])
+
+    # in order to save on compute, we'll split by frequency=day
+    # and process each day, dropping NA values one day at a time
+    data_split_by_day = [
+        group for n, group in accel_and_gyro_df.groupby(pd.Grouper(freq="D"))
+    ]
+
+    data_resampled: pd.DataFrame = pd.concat(
+        [df.resample("75ms").apply(rules).dropna() for df in data_split_by_day]
+    )
+
+    # fix set column -> float64 -> int
+    data_resampled["set"] = data_resampled["set"].astype("int")
+
+    # export the data as .pkl
+    # using pkl for interim files so we can easily just read it in from the processing module
+    data_resampled.to_pickle(Path(DATA_INTERIM_PATH, "01_data_processed.pkl"))
 
 
 if __name__ == "__main__":
