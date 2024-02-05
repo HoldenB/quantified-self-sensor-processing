@@ -3,10 +3,13 @@ from pathlib import Path
 import pandas as pd
 from typing import Any
 
+
 DATA_PATH = Path("../data")
 DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
+DATA_PKL_FILENAME = "01_75ms_data_processed.pkl"
 
 
+# ------------------------------------------------------------ #
 def read_data():
     data_path = Path("../data")
     files = glob(f"{data_path}/*.csv")
@@ -102,6 +105,7 @@ def read_set_from_df(df: pd.DataFrame, set_num: int) -> pd.DataFrame:
     return df[df["set"] == set_num]
 
 
+# ------------------------------------------------------------ #
 def main() -> None:
     files = read_data()
 
@@ -194,8 +198,9 @@ def main() -> None:
 
     # export the data as .pkl
     # using pkl for interim files so we can easily just read it in from the processing module
-    data_resampled.to_pickle(Path(DATA_INTERIM_PATH, "01_data_processed.pkl"))
+    data_resampled.to_pickle(Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME))
 
 
+# ------------------------------------------------------------ #
 if __name__ == "__main__":
     main()
