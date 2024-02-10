@@ -17,7 +17,8 @@ plt.rcParams["figure.dpi"] = 100
 # ------------------------------------------------------------ #
 DATA_PATH = Path("../data")
 DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
-DATA_PKL_FILENAME = "01_75ms_data_processed.pkl"
+DATA_PKL_FILENAME_PROCESSED = "01_75ms_data_processed.pkl"
+DATA_PKL_FILENAME_OUTLIERS_REM = "01_75ms_outliers_removed_chauvenet.pkl"
 
 
 # ------------------------------------------------------------ #
@@ -176,7 +177,7 @@ def mark_outliers_lof(dataset, columns, n=20):
 
 # reorder cols to aggregate accel & gyro indexes
 data_processed_df: pd.DataFrame = pd.read_pickle(
-    Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME)
+    Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_PROCESSED)
 ).reindex(
     columns=[
         "accel_x",
@@ -198,15 +199,18 @@ outlier_cols = list(data_processed_df.columns[:6])
 accel_cols = outlier_cols[:3]
 gyro_cols = outlier_cols[3:]
 
-data_processed_df[accel_cols + ["ex"]].plot.boxplot(
+# ------------------------------------------------------------ #
+# box plots
+data_processed_df[accel_cols + ["ex"]].boxplot(
     by="ex", figsize=(20, 10), layout=(1, 3)
 )
 
-data_processed_df[gyro_cols + ["ex"]].plot.boxplot(
+data_processed_df[gyro_cols + ["ex"]].boxplot(
     by="ex", figsize=(20, 10), layout=(1, 3)
 )
-# plt.show()
+plt.show()
 
+# ------------------------------------------------------------ #
 # need to visualize outliers over time to determine normal values
 # but we need to first mark outliers using IQR
 # marking IQR will add additional cols marked for example: accel_x_outlier
@@ -216,6 +220,7 @@ for col in outlier_cols:
         outlier_marked_df, col, f"{col}_outlier", reset_index=True
     )
 
+# ------------------------------------------------------------ #
 # need to differentiate between exercises otherwise IQR will catch cross-
 # set values that are under-represented and treat them as outliers
 # also to note: rest periods the user could do whatever they liked:
@@ -231,6 +236,7 @@ for col in outlier_cols:
 # note: we sort of make the assumption here that the data follows
 # a normal distribution
 
+# ------------------------------------------------------------ #
 # look at some histograms to verify normal distributions across
 # the sensor data
 data_processed_df[accel_cols + ["ex"]].plot.hist(
@@ -241,6 +247,7 @@ data_processed_df[gyro_cols + ["ex"]].plot.hist(
     by="ex", figsize=(20, 10), layout=(3, 3)
 )
 
+# ------------------------------------------------------------ #
 # mark with Chauvenet’s criterion
 for col in outlier_cols:
     outlier_marked_df = mark_outliers_chauvenet(data_processed_df, col)
@@ -248,6 +255,7 @@ for col in outlier_cols:
         outlier_marked_df, col, f"{col}_outlier", reset_index=True
     )
 
+# ------------------------------------------------------------ #
 # can also try with a local outlier factor (distance based) function
 # Unsupervised Outlier Detection using the Local Outlier Factor (LOF)
 # note: LOF measures the local deviation of the density of a given
@@ -272,7 +280,46 @@ for col in outlier_cols:
     )
     plot_binary_outliers(dataset, col, f"{col}_outlier", reset_index=True)
 
-# TODO pick an approach and filter out outliers for final dataset
+
+# ------------------------------------------------------------ #
+# setting outliers to NaN and cleaning the data
+outliers_removed_df = data_processed_df.copy()
+unique_exercise_labels = outliers_removed_df["ex"].unique()
+for col in outlier_cols:
+    # VERY IMPORTANT that we need to first group the data by
+    # exercise before we consider outliers
+    for label in unique_exercise_labels:
+        # select exercise col projection equal to the current label
+        # note: using the original dataset here
+        by_label_df = mark_outliers_chauvenet(
+            data_processed_df[data_processed_df["ex"] == label], col
+        )
+
+        # boolean indexing w/ outliers (bool) col to ret only values for which
+        # it is marked as an outlier
+        # adjusting the outliers with NaN so we can clean them up later
+        by_label_df.loc[by_label_df[col + "_outlier"], col] = np.nan
+
+        # update col in the original dataframe
+        # get the projection of the original df matched on label and col
+        # and replace with the NaN valued projection (also by col)
+        outliers_removed_df.loc[(outliers_removed_df["ex"] == label), col] = (
+            by_label_df[col]
+        )
+
+        # check how many values end up being pruned
+        n_outliers = len(by_label_df[col]) - len(by_label_df[col].dropna())
+        print(
+            f"Removed [{n_outliers}] outliers from col [{col}] and label [{label}]"
+        )
+
+# exporting the removed outliers
+outliers_removed_df = outliers_removed_df.dropna()
+outliers_removed_df.info()
+outliers_removed_df.to_pickle(
+    Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_OUTLIERS_REM)
+)
+
 
 # ------------------------------------------------------------ #
 # for now we'll comment out because of periodic
