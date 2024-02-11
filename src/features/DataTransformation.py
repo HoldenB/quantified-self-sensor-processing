@@ -1,3 +1,4 @@
+# Referenced from:
 # Mark Hoogendoorn and Burkhardt Funk (2017)
 # Machine Learning for the Quantified Self (Springer, Ch. 4)
 # ------------------------------------------------------------ #
@@ -47,16 +48,17 @@ class LowPassFilter:
 
 # Class for Principal Component Analysis. We can only apply this when we do not have missing values (i.e. NaN).
 # For this we have to impute these first, be aware of this.
-class PrincipalComponentAnalysis:
+class PCA_Helper:
 
     def __init__(self):
-        self.latest_pca_result = []
+        # latest cached PCA result
+        self.pca = []
 
     # Perform the PCA on the selected columns and return the explained variance.
     def determine_pc_explained_variance(self, data_table, cols):
 
         # Normalize the data first.
-        dt_norm = self.normalize_dataset(data_table, cols)
+        dt_norm = DataTransformUtils.normalize_dataset(data_table, cols)
 
         # perform the PCA.
         self.pca = PCA(n_components=len(cols))
@@ -69,7 +71,7 @@ class PrincipalComponentAnalysis:
     def apply_pca(self, data_table, cols, number_comp):
 
         # Normalize the data first.
-        dt_norm = self.normalize_dataset(data_table, cols)
+        dt_norm = DataTransformUtils.normalize_dataset(data_table, cols)
 
         # perform the PCA.
         self.pca = PCA(n_components=number_comp)

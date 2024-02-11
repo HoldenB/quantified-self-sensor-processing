@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from DataTransformation import (
     LowPassFilter,
-    PrincipalComponentAnalysis,
+    PCA_Helper,
 )
 from TemporalAbstraction import NumericalAbstraction
 
@@ -133,3 +133,36 @@ for col in predictor_cols:
     # override the original cols
     df_lowpass[col] = df_lowpass[col + "_lowpass"]
     df_lowpass = df_lowpass.drop(col + "_lowpass", axis=1)
+
+# ------------------------------------------------------------ #
+# PCA
+df_pca = df_lowpass.copy()
+pca_helper = PCA_Helper()
+
+# analyze before determining the number of components we'll use
+# note: using Elbow technique to determine optimal component number
+# Elbow evaluates the components that capture the most variance up
+# until the rate of change in variance diminishes (i.e at the Elbow)
+pca_variance = pca_helper.determine_pc_explained_variance(
+    df_pca, predictor_cols
+)
+
+# visualizing the explained variance as correlated to the number
+# of principal components
+# i.e. as we increase the number of principal components, how much
+# do the latter components still contribute to the variance
+# so how much information do the components carry that is viable for us
+
+# visually see the elbow around 3
+plt.figure(figsize=(10, 10))
+plt.plot(range(1, len(predictor_cols) + 1), pca_variance)
+plt.xlabel("Principal Components")
+plt.ylabel("Explained Variance")
+plt.show()
+
+df_pca = pca_helper.apply_pca(df_pca, predictor_cols, number_comp=3)
+# visualize the principal components
+subset_4 = df_pca[df_pca["set"] == 35]
+subset_4[["pca_1", "pca_2", "pca_3"]].plot()
+
+# ------------------------------------------------------------ #
