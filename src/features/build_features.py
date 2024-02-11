@@ -7,6 +7,7 @@ from DataTransformation import (
     PCA_Helper,
 )
 from TemporalAbstraction import NumericalAbstraction
+from FrequencyAbstraction import FourierTransformation
 
 
 # ------------------------------------------------------------ #
@@ -70,17 +71,17 @@ subset_2.plot()
 
 # set duration for all sets
 set_vals = df["set"].unique()
-for set in set_vals:
-    start = df[df["set"] == set].index[0]
-    stop = df[df["set"] == set].index[-1]
+for s in set_vals:
+    start = df[df["set"] == s].index[0]
+    stop = df[df["set"] == s].index[-1]
     duration = stop - start
     # select row for specific set and add a new column for duration
     # note: [(row predicate), new_col]
-    df.loc[(df["set"] == set), "duration_s"] = duration.seconds
+    df.loc[(df["set"] == s), "duration_s"] = duration.seconds
 
 # average set duration
 # group by exercise type and then project on only the duration
-df.groupby(df["ex"])["duration_s"].mean()
+avg_rep_length_s = df.groupby(df["ex"])["duration_s"].mean()
 
 # something to consider: How can we do this on the fly, in real time
 # when we do not exactly know the full length of the set, if the buffer
@@ -93,7 +94,7 @@ df.groupby(df["ex"])["duration_s"].mean()
 
 # ------------------------------------------------------------ #
 # low-pass filtering
-df_lowpass = df.copy()
+df_lowpass: pd.DataFrame = df.copy()
 
 # sampling frequency = step size between reps
 # cutoff frequency = tuning param - look @ filter results and consider
@@ -136,7 +137,7 @@ for col in predictor_cols:
 
 # ------------------------------------------------------------ #
 # PCA
-df_pca = df_lowpass.copy()
+df_pca: pd.DataFrame = df_lowpass.copy()
 pca_helper = PCA_Helper()
 
 # analyze before determining the number of components we'll use
@@ -180,7 +181,7 @@ subset_4[["pca_1", "pca_2", "pca_3"]].plot()
 # note: we're attempting sum of squares because using r vs specific
 # directions will allow us to be impartial to the device orientation,
 # and can help with dynamic re-orientations
-df_squared = df_pca.copy()
+df_squared: pd.DataFrame = df_pca.copy()
 
 # magnitude of the acceleration
 accel_r = (
@@ -202,3 +203,86 @@ df_squared["gyro_r"] = np.sqrt(gyro_r)
 # visualize another subset of the data
 subset_5 = df_squared[df_squared["set"] == 14]
 subset_5[["accel_r", "gyro_r"]].plot(subplots=True)
+
+# ------------------------------------------------------------ #
+# temporal abstraction - via rolling average / window
+df_temporal: pd.DataFrame = df_squared.copy()
+
+updated_predictor_cols = predictor_cols + ["accel_r", "gyro_r"]
+
+# finding the window size (this will need to be tuned)
+# window-size is our "look-back" size
+# start off with a window size of 300ms
+# note: our step size is 75ms
+# step size = 500ms // 75ms = 6
+window_size = 500 // 75
+
+# need to compute mean & std for the updated predictor cols
+# note: need to consider the case when the look-back window
+# crosses over to the next exercise/set, so we need to
+# project across the set space first before aggregation
+df_temporal_sets = []
+unique_sets = df_temporal["set"].unique()
+for s in unique_sets:
+    subset = df_temporal[df_temporal["set"] == s].copy()
+    subset = NumericalAbstraction.abstract(
+        # set-space projection of the data
+        subset,
+        updated_predictor_cols,
+        window_size,
+        aggregation_functions=["mean", "std"],
+    )
+    df_temporal_sets.append(subset)
+
+# re-construct the temporal df from the subsets and replace the
+# previous
+df_temporal = pd.concat(df_temporal_sets)
+# should notice 3 NaN values per set for each of the aggregation cols
+df_temporal.info()
+
+# example visualization
+subset_6 = df_temporal_sets[4][
+    ["accel_y", "accel_y_temp_mean_ws_6", "accel_y_temp_std_ws_6"]
+].plot()
+
+# ------------------------------------------------------------ #
+# using DFT for frequency abstraction
+# need to reset index because we expect a discrete
+# representation of the data
+df_freq = df_temporal.copy().reset_index()
+
+# num samples / sec i.e frequency of a sample
+# (discrete sampling rate -- this needs to be an int)
+sampling_rate = 1000 // 75
+# window size = avg length of a rep
+# we can tailor this using the list of averages we calculated earlier
+# or for simplicity sake for now just make an approximation
+# we can approximate ~2.8s or 2800ms per rep for now
+# window_size = 2800 // 75
+
+# note: using 14 here because of broadcasting error -- need to
+# look further into this
+window_size = 14
+
+df_freq = FourierTransformation.abstract_frequency(
+    df_freq, ["accel_y"], window_size, sampling_rate
+)
+
+df_freq.columns
+
+# visualizing a subset of this
+subset_7 = df_freq[df_freq["set"] == 15]
+subset_7[["accel_y"]].plot()
+subset_7[
+    [
+        "accel_y_max_freq",
+        "accel_y_freq_weighted",
+        "accel_y_pse",
+        "accel_y_freq_1.857_Hz_ws_14",
+        "accel_y_freq_3.714_Hz_ws_14",
+        "accel_y_freq_5.571_Hz_ws_14",
+    ]
+].plot()
+
+# splitting by the set and then running the DFT on each set
+# TODO

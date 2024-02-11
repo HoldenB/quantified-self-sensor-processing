@@ -11,7 +11,7 @@ class NumericalAbstraction:
     # This function aggregates a list of values using the specified aggregation
     # function (which can be 'mean', 'max', 'min', 'median', 'std')
     @staticmethod
-    def aggregate_value(aggregation_function):
+    def aggregate(aggregation_function):
         # Compute the values and return the result.
         if aggregation_function == "mean":
             return np.mean
@@ -29,26 +29,19 @@ class NumericalAbstraction:
     # Abstract numerical columns specified given a window size (i.e. the number of time points from
     # the past considered) and an aggregation function.
     @staticmethod
-    def abstract_numerical(
+    def abstract(
         data_table,
         cols,
         window_size,
-        aggregation_function,
+        aggregation_functions,
     ):
         # Create new columns for the temporal data, pass over the dataset and compute values
         for col in cols:
-            data_table[
-                col
-                + "_temp_"
-                + aggregation_function
-                + "_ws_"
-                + str(window_size)
-            ] = (
-                data_table[col]
-                .rolling(window_size)
-                .apply(
-                    NumericalAbstraction.aggregate_value(aggregation_function)
+            for fn in aggregation_functions:
+                data_table[col + "_temp_" + fn + "_ws_" + str(window_size)] = (
+                    data_table[col]
+                    .rolling(window_size)
+                    .apply(NumericalAbstraction.aggregate(fn))
                 )
-            )
 
         return data_table

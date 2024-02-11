@@ -22,7 +22,6 @@ class FourierTransformation:
     # (i.e. Frequency is Hertz of the dataset).
     @staticmethod
     def abstract_frequency(data_table, cols, window_size, sampling_rate):
-
         # Create new columns for the frequency data.
         freqs = np.round(
             (np.fft.rfftfreq(int(window_size)) * sampling_rate), 3
