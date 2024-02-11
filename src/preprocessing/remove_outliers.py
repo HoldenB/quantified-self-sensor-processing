@@ -12,10 +12,11 @@ from pathlib import Path
 plt.style.use("fivethirtyeight")
 plt.rcParams["figure.figsize"] = (20, 5)
 plt.rcParams["figure.dpi"] = 100
+plt.rcParams["lines.linewidth"] = 2
 
 
 # ------------------------------------------------------------ #
-DATA_PATH = Path("../data")
+DATA_PATH = Path("../../data")
 DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
 DATA_PKL_FILENAME_PROCESSED = "01_75ms_data_processed.pkl"
 DATA_PKL_FILENAME_OUTLIERS_REM = "01_75ms_outliers_removed_chauvenet.pkl"
@@ -314,7 +315,6 @@ for col in outlier_cols:
         )
 
 # exporting the removed outliers
-outliers_removed_df = outliers_removed_df.dropna()
 outliers_removed_df.info()
 outliers_removed_df.to_pickle(
     Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_OUTLIERS_REM)
