@@ -165,4 +165,40 @@ df_pca = pca_helper.apply_pca(df_pca, predictor_cols, number_comp=3)
 subset_4 = df_pca[df_pca["set"] == 35]
 subset_4[["pca_1", "pca_2", "pca_3"]].plot()
 
+# need to further analyze the principal components to see if
+# they could be potentially used for classification opposed to the
+# original 6-dof values
+
+# I'm not sure if PCA will really buy us anything here because
+# even though angular acceleration does not have nearly as much
+# variance as linear acceleration in most movements, the need to
+# classify a curl vs hammer curl will rely solely on angular
+# acceleration
+
 # ------------------------------------------------------------ #
+# sum of squares attributes
+# note: we're attempting sum of squares because using r vs specific
+# directions will allow us to be impartial to the device orientation,
+# and can help with dynamic re-orientations
+df_squared = df_pca.copy()
+
+# magnitude of the acceleration
+accel_r = (
+    df_squared["accel_x"] ** 2
+    + df_squared["accel_y"] ** 2
+    + df_squared["accel_z"] ** 2
+)
+
+# magnitude of gyro
+gyro_r = (
+    df_squared["gyro_x"] ** 2
+    + df_squared["gyro_y"] ** 2
+    + df_squared["gyro_z"] ** 2
+)
+
+df_squared["accel_r"] = np.sqrt(accel_r)
+df_squared["gyro_r"] = np.sqrt(gyro_r)
+
+# visualize another subset of the data
+subset_5 = df_squared[df_squared["set"] == 14]
+subset_5[["accel_r", "gyro_r"]].plot(subplots=True)
