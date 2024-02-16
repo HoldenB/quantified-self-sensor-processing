@@ -35,6 +35,10 @@ DATA_PKL_FILENAME_FEATURES_OUT = "01_75ms_feature_extract_out.pkl"
 
 
 # ------------------------------------------------------------ #
+# def main():
+#     pass
+
+# ------------------------------------------------------------ #
 df: pd.DataFrame = pd.read_pickle(
     Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_OUTLIERS_REM)
 )
@@ -398,3 +402,9 @@ plt.show()
 
 # exporting the pkl
 df_cluster.to_pickle(Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_FEATURES_OUT))
+
+# ------------------------------------------------------------ #
+# for now we'll comment out because of periodic
+# runs in jupyter interactive
+# if __name__ == "__main__":
+#     main()
