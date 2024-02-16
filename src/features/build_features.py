@@ -31,6 +31,7 @@ LEGEND_STYLE_KWARGS = {
 DATA_PATH = Path("../../data")
 DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
 DATA_PKL_FILENAME_OUTLIERS_REM = "01_75ms_outliers_removed_chauvenet.pkl"
+DATA_PKL_FILENAME_FEATURES_OUT = "01_75ms_feature_extract_out.pkl"
 
 
 # ------------------------------------------------------------ #
@@ -311,7 +312,7 @@ df_freq.info()
 # we need to avoid this to prevent overfitting later on when training
 # need to allow for a certain % of overlap and then remove the rest of
 # the data
-df_freq.dropna()
+df_freq = df_freq.dropna()
 
 # typically we can allow for 50% -- meaning we can get rid of ~50% of
 # the data
@@ -321,3 +322,79 @@ df_freq.dropna()
 
 # getting every other row
 df_freq = df_freq.iloc[::2]
+
+# ------------------------------------------------------------ #
+# feature-engineering with k-means clustering
+df_cluster: pd.DataFrame = df_freq.copy()
+
+cluster_cols = ["accel_x", "accel_y", "accel_z"]
+k_values = range(2, 10)
+inertias = []
+
+# testing the range of k-values
+# we will plot the inertias & then use ELBOW
+# technique to pick the optimal k-value
+for k in k_values:
+    subset = df_cluster[cluster_cols]
+    k_means = KMeans(n_clusters=k, n_init=20, random_state=0)
+    cluster_labels = k_means.fit_predict(X=subset)
+    # inertia is the sum of squared distances of samples
+    # to their closest cluster center, weighted by
+    # the sample weights if provided
+    #
+    # we can treat inertia similar to principal components
+    # when using the ELBOW method
+    inertias.append(k_means.inertia_)
+
+
+# plotting inertias
+plt.figure(figsize=(10, 10))
+plt.plot(k_values, inertias)
+plt.xlabel("K-Value")
+plt.ylabel("Sum of Sq. Dist. (Inertia)")
+plt.show()
+
+# result displays k=5 as the ELBOW however since we have 6 labels, we'll
+# go with k=6 and try that out
+elbow_k_result = 6
+subset_km = df_cluster[cluster_cols]
+k_means = KMeans(n_clusters=elbow_k_result, n_init=20, random_state=0)
+cluster_labels = k_means.fit_predict(X=subset_km)
+df_cluster["cluster"] = cluster_labels
+
+# visualize the clusters to see if they make any sense
+# need to eventually function all of this out...
+fig = plt.figure(figsize=(15, 15))
+ax = fig.add_subplot(projection="3d")
+unique_cluster_vals = df_cluster["cluster"].unique()
+for cluster in unique_cluster_vals:
+    subset = df_cluster[df_cluster["cluster"] == cluster]
+    ax.scatter(
+        subset["accel_x"], subset["accel_y"], subset["accel_z"], label=cluster
+    )
+
+ax.set_xlabel("x-accel")
+ax.set_ylabel("y-accel")
+ax.set_zlabel("z-accel")
+plt.legend()
+plt.show()
+
+# now lets compare the same plot and instead of splitting by cluster
+# we split by label (i.e. by exercise)
+fig = plt.figure(figsize=(15, 15))
+ax = fig.add_subplot(projection="3d")
+unique_label_vals = df_cluster["ex"].unique()
+for label in unique_label_vals:
+    subset = df_cluster[df_cluster["ex"] == label]
+    ax.scatter(
+        subset["accel_x"], subset["accel_y"], subset["accel_z"], label=label
+    )
+
+ax.set_xlabel("x-accel")
+ax.set_ylabel("y-accel")
+ax.set_zlabel("z-accel")
+plt.legend()
+plt.show()
+
+# exporting the pkl
+df_cluster.to_pickle(Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME_FEATURES_OUT))
