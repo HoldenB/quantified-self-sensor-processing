@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 from pathlib import Path
 from DataTransformation import (
     LowPassFilter,
@@ -249,7 +250,7 @@ subset_6 = df_temporal_sets[4][
 # using DFT for frequency abstraction
 # need to reset index because we expect a discrete
 # representation of the data
-df_freq = df_temporal.copy().reset_index()
+df_freq: pd.DataFrame = df_temporal.copy().reset_index()
 
 # num samples / sec i.e frequency of a sample
 # (discrete sampling rate -- this needs to be an int)
@@ -264,14 +265,14 @@ sampling_rate = 1000 // 75
 # look further into this
 window_size = 14
 
-df_freq = FourierTransformation.abstract_frequency(
+df_freq_ex: pd.DataFrame = FourierTransformation.abstract_frequency(
     df_freq, ["accel_y"], window_size, sampling_rate
 )
 
-df_freq.columns
+df_freq_ex.columns
 
 # visualizing a subset of this
-subset_7 = df_freq[df_freq["set"] == 15]
+subset_7 = df_freq_ex[df_freq_ex["set"] == 15]
 subset_7[["accel_y"]].plot()
 subset_7[
     [
@@ -284,5 +285,39 @@ subset_7[
     ]
 ].plot()
 
+# ------------------------------------------------------------ #
 # splitting by the set and then running the DFT on each set
-# TODO
+# for now we're doing this the exact same way as the temporal computation
+df_freq_sets = []
+unique_sets = df_freq["set"].unique()
+for s in unique_sets:
+    print(f"Applying Fourier transformation to set {s}")
+    subset = df_freq[df_freq["set"] == s].reset_index(drop=True).copy()
+    subset = FourierTransformation.abstract_frequency(
+        subset, updated_predictor_cols, window_size, sampling_rate
+    )
+    df_freq_sets.append(subset)
+
+# re-construct the frequency df from the subsets and replace the
+# previous
+df_freq = pd.concat(df_freq_sets).set_index("epoch (ms)", drop=True)
+df_freq.info()
+
+# dealing with overlapping windows
+# since we added a bunch of extra columns based on rolling windows
+# this causes our data to be highly correlated on a row-by-row basis
+# (adjacent rows)
+#
+# we need to avoid this to prevent overfitting later on when training
+# need to allow for a certain % of overlap and then remove the rest of
+# the data
+df_freq.dropna()
+
+# typically we can allow for 50% -- meaning we can get rid of ~50% of
+# the data
+# this will ensure later models are less prone to overfitting
+# we can tweak this later on and test with ranges of 50-80% overlap
+# or variable based on the windowing size
+
+# getting every other row
+df_freq = df_freq.iloc[::2]
