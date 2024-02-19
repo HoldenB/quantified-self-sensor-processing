@@ -87,7 +87,6 @@ class ClassificationAlgorithms:
         grid_search=True,
         print_model_details=False,
     ):
-
         if grid_search:
             tuned_parameters = [
                 {
