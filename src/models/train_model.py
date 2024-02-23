@@ -174,6 +174,7 @@ X = df_train.drop("ex", axis=1)
 # labels only
 y = df_train["ex"]
 
+# ------------------------------------------------------------ #
 # training/test split
 # stratify ensures that we see every label in the splits i.e
 # an equal distribution of the labels
@@ -221,6 +222,7 @@ fs_2 = list(set(fs_1 + square_features + pca_features))
 fs_3 = list(set(fs_2 + time_features))
 fs_4 = list(set(fs_3 + frequency_features + cluster_features))
 
+# ------------------------------------------------------------ #
 # feature selection (forward feature selection) with simple decision tree
 # loop over single features, starting small, in a forward selection to
 # try individual features to check acc on scoring the labels
@@ -233,10 +235,12 @@ fs_4 = list(set(fs_3 + frequency_features + cluster_features))
 model_orchestrator = ClassificationAlgorithms()
 
 max_features = 10
+# ########################################
 # commenting out for now: this takes a lot of computational resources
 # selected_features, ordered_features, ordered_scores = (
 #     model_orchestrator.forward_selection(max_features, X_train, y_train)
 # )
+# ########################################
 
 # result from forward_selection
 selected_features = [
@@ -272,33 +276,38 @@ plt.xlabel("Number of Features")
 plt.ylabel("Accuracy")
 plt.show()
 
+# ------------------------------------------------------------ #
 # using grid search to select the best hyperparams and model combinations
 # we will use a 5-fold cross validation on the training set
 possible_feature_sets = [fs_1, fs_2, fs_3, fs_4, selected_features]
 feature_set_names = ["fs_1", "fs_2", "fs_3", "fs_4", "selected_fs"]
 
-score_df = run_grid_search_on_models(
-    model_orchestrator,
-    X_train,
-    X_test,
-    y_train,
-    possible_feature_sets,
-    feature_set_names,
-    iterations=1,
-)
+# ########################################
+# commented out for now because of the computation time
+# score_df = run_grid_search_on_models(
+#     model_orchestrator,
+#     X_train,
+#     X_test,
+#     y_train,
+#     possible_feature_sets,
+#     feature_set_names,
+#     iterations=1,
+# )
 
-score_df.sort_values(by="accuracy", ascending=False)
+# score_df.sort_values(by="accuracy", ascending=False)
 
-# grouped bar plot to visualize the results
-plt.figure(figsize=(10, 10))
-# x/y/hue need to match the cols in the score_df
-sns.barplot(x="model", y="accuracy", hue="feature_set", data=score_df)
-plt.xlabel("Model")
-plt.ylabel("Accuracy")
-plt.ylim(0.7, 1)
-plt.legend(loc="lower right")
-plt.show()
+# # grouped bar plot to visualize the results
+# plt.figure(figsize=(10, 10))
+# # x/y/hue need to match the cols in the score_df
+# sns.barplot(x="model", y="accuracy", hue="feature_set", data=score_df)
+# plt.xlabel("Model")
+# plt.ylabel("Accuracy")
+# plt.ylim(0.7, 1)
+# plt.legend(loc="lower right")
+# plt.show()
+# ########################################
 
+# ------------------------------------------------------------ #
 # selecting best model and evaluating the results - output was fairly close
 # between RF - fs_4 & NN - fs_4
 # we'll start with testing RF
@@ -318,12 +327,73 @@ conf_mat_rf = confusion_matrix(y_test, class_test_y, labels=classes_rf)
 
 plot_confusion_matrix(conf_mat_rf, classes_rf)
 
+# ------------------------------------------------------------ #
 # subtracting participant A from the training data -- our goal
 # is to train on the set minus A and then validate if the model
 # can generalize to the data specific to participant A
 # i.e. everyone does exercises differently and we need to ensure
 # that the model can generalize across different participants
-participant_df = df.drop(["set", "ex"], axis=1)
+participant_df = df.drop(["set", "effort"], axis=1)
+
+participant_df_without_A: pd.DataFrame = participant_df[
+    participant_df["participant"] != "A"
+]
+
+participant_df_A: pd.DataFrame = participant_df[
+    participant_df["participant"] == "A"
+]
+
+X_train = participant_df_without_A.drop(["ex"], axis=1)
+y_train = participant_df_without_A["ex"]
+
+X_test = participant_df_A.drop(["ex"], axis=1)
+y_test = participant_df_A["ex"]
+
+# best practice to just drop the participant after splitting
+X_train = X_train.drop(["participant"], axis=1)
+X_test = X_test.drop(["participant"], axis=1)
+
+# ------------------------------------------------------------ #
+# using the best model to evaluate the new dataset without participant A
+# (
+#     class_train_y,
+#     class_test_y,
+#     class_train_prob_y,
+#     class_test_prob_y,
+# ) = model_orchestrator.random_forest(
+#     X_train[fs_4],
+#     y_train,
+#     X_test[fs_4],
+#     grid_search=True,
+# )
+
+# # exploring the confusion matrix for the RF classifier
+# acc_rf = accuracy_score(y_test, class_test_y)
+# classes_rf = class_test_prob_y.columns
+# conf_mat_rf = confusion_matrix(y_test, class_test_y, labels=classes_rf)
+
+# plot_confusion_matrix(conf_mat_rf, classes_rf)
+
+# ------------------------------------------------------------ #
+# trying another model with selected features
+# we'll try the feedforward network
+(
+    class_train_y,
+    class_test_y,
+    class_train_prob_y,
+    class_test_prob_y,
+) = model_orchestrator.feedforward_neural_network(
+    X_train[fs_4],
+    y_train,
+    X_test[fs_4],
+    grid_search=False,
+)
+
+acc_rf = accuracy_score(y_test, class_test_y)
+classes_rf = class_test_prob_y.columns
+conf_mat_rf = confusion_matrix(y_test, class_test_y, labels=classes_rf)
+
+plot_confusion_matrix(conf_mat_rf, classes_rf)
 
 # ------------------------------------------------------------ #
 # for now we'll comment out because of periodic
