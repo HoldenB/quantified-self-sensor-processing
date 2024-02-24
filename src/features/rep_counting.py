@@ -27,11 +27,121 @@ DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
 DATA_PKL_FILENAME = "01_75ms_data_processed.pkl"
 
 
+def to_label_dict(df: pd.DataFrame, label_col: str) -> dict[str, pd.DataFrame]:
+    return {
+        label: df[df[label_col] == label] for label in df[label_col].unique()
+    }
+
+
+def cal_sum_of_squares_attr(
+    df: pd.DataFrame, label_prefix: str
+) -> pd.DataFrame:
+    df_sum_sq: pd.DataFrame = df.copy()
+    df_sum_sq[label_prefix + "_r"] = np.sqrt(
+        df_minus_rest[label_prefix + "_x"] ** 2
+        + df_minus_rest[label_prefix + "_y"] ** 2
+        + df_minus_rest[label_prefix + "_z"] ** 2
+    )
+
+    return df_sum_sq
+
+
+def calc_reps_naive(
+    df: pd.DataFrame,
+    col: str,
+    lp_fs: float,
+    lp_cutoff: float = 0.4,
+    lp_order: int = 10,
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    filt = LowPassFilter.low_pass_filter(
+        df,
+        col=col,
+        sampling_frequency=lp_fs,
+        cutoff_frequency=lp_cutoff,
+        order=lp_order,
+    )
+
+    indexes = argrelextrema(filt[col + "_lowpass"].values, np.less)
+    rel_mins = df.iloc[indexes]
+    return (filt, rel_mins)
+
+
+def plot_rel_extrema_against_labels(
+    df: pd.DataFrame, rel_extrema: pd.DataFrame, col: str
+) -> None:
+    lp_col = col + "_lowpass"
+    fig, ax = plt.subplots()
+    plt.plot(df[lp_col])
+    plt.plot(rel_extrema[lp_col], "o", color="red")
+    ax.set_ylabel(lp_col)
+    effort = rel_extrema["effort"].iloc[0].title()
+    exercise = rel_extrema["ex"].iloc[0].title()
+    plt.title(f"{effort} {exercise}: {len(rel_extrema)} Reps")
+    plt.show()
+
+
 # ------------------------------------------------------------ #
 # def main():
 #     pass
 
 df: pd.DataFrame = pd.read_pickle(Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME))
+
+# we dont care about rest periods when classifying reps
+df_minus_rest: pd.DataFrame = df[df["ex"] != "rest"]
+
+# sum of squares attributes
+# note: we're attempting sum of squares because using r vs specific
+# directions will allow us to be impartial to the device orientation,
+# and can help with dynamic re-orientations
+
+# magnitudes of accel & gyro columns
+df_minus_rest = cal_sum_of_squares_attr(df_minus_rest, "accel")
+df_minus_rest = cal_sum_of_squares_attr(df_minus_rest, "gyro")
+
+# ------------------------------------------------------------ #
+# splitting the data
+label_dict = to_label_dict(df_minus_rest, "ex")
+
+# ------------------------------------------------------------ #
+# visualizing to identify patterns
+plot_df: pd.DataFrame = label_dict["bench"]
+
+# picking the first set for an example
+plot_df[plot_df["set"] == plot_df["set"].unique()[0]].plot()
+
+# ------------------------------------------------------------ #
+# lowpass filtering
+
+# using 75ms from pre-filtering -- can adjust this to 200ms
+# later on to compare results -- 75ms seems to give some issues
+# with correctly classifying bench -- errors as OHP
+sampling_frequency = 1000 / 75
+
+# testing lowpass filter
+bench_df: pd.DataFrame = label_dict["bench"]
+bench_set_ex = bench_df[bench_df["set"] == bench_df["set"].unique()[0]].drop(
+    ["set"], axis=1
+)
+
+bench_set_ex["accel_r"].plot()
+
+filt = LowPassFilter.low_pass_filter(
+    bench_set_ex,
+    col="accel_r",
+    sampling_frequency=sampling_frequency,
+    cutoff_frequency=0.4,
+    order=10,
+)
+
+filt["accel_r_lowpass"].plot()
+
+# ------------------------------------------------------------ #
+# counting reps by calculating the relative extrema of data -- naive method
+filt, extrema = calc_reps_naive(
+    bench_set_ex, "accel_r", lp_fs=sampling_frequency
+)
+
+plot_rel_extrema_against_labels(filt, extrema, "accel_r")
 
 # ------------------------------------------------------------ #
 # for now we'll comment out because of periodic
