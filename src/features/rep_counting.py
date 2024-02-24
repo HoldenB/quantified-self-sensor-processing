@@ -27,6 +27,20 @@ DATA_INTERIM_PATH = Path(DATA_PATH, "interim")
 DATA_PKL_FILENAME = "01_75ms_data_processed.pkl"
 
 
+# ------------------------------------------------------------ #
+class Exercise:
+    def __init__(
+        self, name: str, cutoff: float, pred_col: str = "accel_r"
+    ) -> None:
+        self.name = name
+        self.cutoff = cutoff
+        self.pred_col = pred_col
+
+    def to_key_value_pair(self) -> tuple[str, "Exercise"]:
+        return (self.name, self)
+
+
+# ------------------------------------------------------------ #
 def to_label_dict(df: pd.DataFrame, label_col: str) -> dict[str, pd.DataFrame]:
     return {
         label: df[df[label_col] == label] for label in df[label_col].unique()
@@ -89,6 +103,17 @@ df: pd.DataFrame = pd.read_pickle(Path(DATA_INTERIM_PATH, DATA_PKL_FILENAME))
 # we dont care about rest periods when classifying reps
 df_minus_rest: pd.DataFrame = df[df["ex"] != "rest"]
 
+# injecting rep labels based on effort category
+effort_map = {"heavy": 5, "medium": 10}
+df_minus_rest["reps"] = df_minus_rest["effort"].apply(lambda x: effort_map[x])
+
+# rep df to benchmark approach (ground-truth data)
+rep_df: pd.DataFrame = (
+    df_minus_rest.groupby(["ex", "effort", "set"])["reps"].max().reset_index()
+)
+rep_df["reps_pred"] = 0
+
+# ------------------------------------------------------------ #
 # sum of squares attributes
 # note: we're attempting sum of squares because using r vs specific
 # directions will allow us to be impartial to the device orientation,
@@ -142,6 +167,33 @@ filt, extrema = calc_reps_naive(
 )
 
 plot_rel_extrema_against_labels(filt, extrema, "accel_r")
+
+# ------------------------------------------------------------ #
+# predefined param values from testing
+# these can be tuned with further testing
+params = [
+    Exercise("bench", 0.4),
+    Exercise("squat", 0.35),
+    Exercise("row", 0.65, pred_col="gyro_x"),
+    Exercise("ohp", 0.35),
+    Exercise("dead", 0.4),
+]
+ex_param_map = {x.name: x for x in params}
+
+# ------------------------------------------------------------ #
+# benchmarking the naive approach
+for s in df_minus_rest["set"].unique():
+    subset = df_minus_rest[df_minus_rest["set"] == s]
+    ex_label = subset["ex"].iloc[0]
+    exercise: Exercise = ex_param_map[ex_label]
+    filt, extrema = calc_reps_naive(
+        subset,
+        exercise.pred_col,
+        lp_fs=sampling_frequency,
+        lp_cutoff=exercise.cutoff,
+    )
+    plot_rel_extrema_against_labels(filt, extrema, exercise.pred_col)
+
 
 # ------------------------------------------------------------ #
 # for now we'll comment out because of periodic
