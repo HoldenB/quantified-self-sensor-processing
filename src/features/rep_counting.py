@@ -172,11 +172,11 @@ plot_rel_extrema_against_labels(filt, extrema, "accel_r")
 # predefined param values from testing
 # these can be tuned with further testing
 params = [
-    Exercise("bench", 0.4),
-    Exercise("squat", 0.35),
-    Exercise("row", 0.65, pred_col="gyro_x"),
-    Exercise("ohp", 0.35),
-    Exercise("dead", 0.4),
+    Exercise("bench", 0.5),
+    Exercise("squat", 0.4, pred_col="accel_y"),
+    Exercise("row", 0.7, pred_col="gyro_y"),
+    Exercise("ohp", 0.5, pred_col="accel_y"),
+    Exercise("dead", 0.5),
 ]
 ex_param_map = {x.name: x for x in params}
 
@@ -192,8 +192,17 @@ for s in df_minus_rest["set"].unique():
         lp_fs=sampling_frequency,
         lp_cutoff=exercise.cutoff,
     )
-    plot_rel_extrema_against_labels(filt, extrema, exercise.pred_col)
 
+    # commenting out visualizations for now
+    # plot_rel_extrema_against_labels(filt, extrema, exercise.pred_col)
+
+    # inject predicted results into ground truth dataframe
+    rep_df.loc[rep_df["set"] == s, "reps_pred"] = len(extrema)
+
+# ------------------------------------------------------------ #
+# MSE (mean absolute error) to evaluate the results
+error = mean_absolute_error(rep_df["reps"], rep_df["reps_pred"]).round(2)
+rep_df.groupby(["ex", "effort"])[["reps", "reps_pred"]].mean().plot.bar()
 
 # ------------------------------------------------------------ #
 # for now we'll comment out because of periodic
